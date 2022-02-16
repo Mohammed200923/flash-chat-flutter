@@ -1,12 +1,43 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flash_chat/constants.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ChatScreen extends StatefulWidget {
+  const ChatScreen({Key? key}) : super(key: key);
+  static const String id = 'chatScreen';
+
   @override
   _ChatScreenState createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final String firestoreDocumentId = 'messages';
+  final _firestore = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+  User? loggedInUser;
+  String? messages;
+
+  void getCurrentUser() {
+    try {
+      _auth.userChanges().listen((event) {
+        if (event != null) {
+          loggedInUser = event;
+        }
+      });
+    } catch (e) {
+      Exception(e);
+    }
+  }
+
+
+  @override
+  void initState() {
+    super.initState();
+
+    getCurrentUser();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -14,12 +45,14 @@ class _ChatScreenState extends State<ChatScreen> {
         leading: null,
         actions: <Widget>[
           IconButton(
-              icon: Icon(Icons.close),
+              icon: const Icon(Icons.close),
               onPressed: () {
                 //Implement logout functionality
+                Navigator.pop(context);
+                _auth.signOut();
               }),
         ],
-        title: Text('⚡️Chat'),
+        title: const Text('⚡️Chat \u26A1'),
         backgroundColor: Colors.lightBlueAccent,
       ),
       body: SafeArea(
@@ -27,6 +60,33 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            StreamBuilder<QuerySnapshot>(
+                stream: _firestore.collection(firestoreDocumentId).snapshots(),
+                builder: (BuildContext context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator.adaptive(
+                        backgroundColor: Colors.lightBlueAccent,
+                      ),
+                    );
+                  }
+                  final messages = snapshot.data!.docs;
+                  List<Text> messageWidgets = [];
+                  for (var message in messages) {
+                    Map<String, dynamic> messageData =
+                    message.data()! as Map<String, dynamic>;
+                    final messageText = messageData['message'];
+                    final sender = messageData['sender'];
+
+                    final messageWidget = Text('$messageText From $sender');
+                    messageWidgets.add(messageWidget);
+                  }
+                  return Column(
+                    children: const [
+
+                    ],
+                  );
+                }),
             Container(
               decoration: kMessageContainerDecoration,
               child: Row(
@@ -35,16 +95,20 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       onChanged: (value) {
-                        //Do something with the user input.
+                        messages = value;
                       },
                       decoration: kMessageTextFieldDecoration,
                     ),
                   ),
-                  FlatButton(
+                  TextButton(
                     onPressed: () {
                       //Implement send functionality.
+                      _firestore.collection('messages').add({
+                        'message': messages,
+                        'sender': loggedInUser?.email,
+                      });
                     },
-                    child: Text(
+                    child: const Text(
                       'Send',
                       style: kSendButtonTextStyle,
                     ),
